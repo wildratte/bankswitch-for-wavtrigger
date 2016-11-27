@@ -286,7 +286,7 @@ ISR(TAST_BS_TRIG_3_6_PCINT_vect)
 /*
 Wavtrigger protocol:
 
-16-bit data values such as track number and volume are sent ìlittle-endianî, that is with the LSB first and the MSB second.
+16-bit data values such as track number and volume are sent ‚Äúlittle-endian‚Äù, that is with the LSB first and the MSB second.
 
 Message format: ( SOM1, SOM2, length, message code, data * n , EOM ),  where SOM1=0xf0,  SOM2=0xaa,  EOM=0x55
 
@@ -415,7 +415,7 @@ void save_volume(unsigned char bank, unsigned char trigger)
 	EECR = (0<<EEPM1)|(0<<EEPM0);
 	// Set up address and data registers
 	EEAR =  bank * 10 + trigger;
-	EEDR = (unsigned char)volume;
+	EEDR = (unsigned char)(volume + 80);
 	// Write logical one to EEMPE
 	EECR |= (1<<EEMPE);
 	// Start eeprom write by setting EEPE
@@ -438,9 +438,9 @@ void load_volume(unsigned char bank, unsigned char trigger)
 	EECR |= (1<<EERE);
 	// Return data from data register
 	result = EEDR;
-	if ((signed char)result >= -70 && result <= 10) // valid !!! (-70 .. +10)
+	if (result >= 10 && result <= 90) // valid !!! (-70 .. +10)
 	{
-		track_volume[bank-1][trigger-1] = (signed char)result;
+		track_volume[bank-1][trigger-1] = (signed char)result - 80;
 	}
 }
 
@@ -520,10 +520,15 @@ int main(void)
 
 	// debug
 	/*
-	save_volume(1,1,-8);
-	save_volume(6,6,7);
-	send_volume(1,1,-8);
-	send_volume(6,6,7);
+	track_volume[0][0] = -8;
+	track_volume[5][5] = 7;
+	save_volume(1,1);
+	save_volume(6,6);
+	load_volume(1,1);
+	load_volume(6,6);
+	send_volume(1,1);
+	send_volume(6,6);
+	show_volume(1,1);
 	*/
 
 	// enable interrupts
