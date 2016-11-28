@@ -615,7 +615,7 @@ int main(void)
 					save_volume(bank, bs_mode);
 					show_volume(bank, bs_mode);
 					// play_track(bank, bs_mode);
-					// send_volume(bank, bs_mode);
+					send_volume(bank, bs_mode); // (re)enables track volume update of playing track
 
 					trigger = 0;
 				}
