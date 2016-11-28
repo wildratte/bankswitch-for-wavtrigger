@@ -1,5 +1,7 @@
 /*
- * Bankswitch-Extension for Wavtrigger.c
+ * main.c
+ *
+ * Bank-switch-Extension for Wavtrigger
  *
  * Created: 24.10.2016 22:47:15
  * Author : JH
@@ -286,7 +288,7 @@ ISR(TAST_BS_TRIG_3_6_PCINT_vect)
 /*
 Wavtrigger protocol:
 
-16-bit data values such as track number and volume are sent “little-endian”, that is with the LSB first and the MSB second.
+16-bit data values such as track number and volume are sent "little-endian", that is with the LSB first and the MSB second.
 
 Message format: ( SOM1, SOM2, length, message code, data * n , EOM ),  where SOM1=0xf0,  SOM2=0xaa,  EOM=0x55
 
@@ -354,7 +356,7 @@ void send_prot(unsigned char * prot, unsigned char prot_len)
 	}
 }
 
-// send play track monophon 
+// send play track monophonic
 void play_track(unsigned char bank, unsigned char trigger)
 {
 	uint16_t track = 0;
@@ -371,7 +373,8 @@ void play_track(unsigned char bank, unsigned char trigger)
 
 //
 // track volume
-// 
+// stored in EEPROM with offset of 80 to detect uninitialized EEPROM (would result in track volume of -1)
+//
 signed char track_volume[6][6] =
 {
 	{0,0,0,0,0,0},
@@ -418,7 +421,7 @@ void save_volume(unsigned char bank, unsigned char trigger)
 	EEDR = (unsigned char)(volume + 80);
 	// Write logical one to EEMPE
 	EECR |= (1<<EEMPE);
-	// Start eeprom write by setting EEPE
+	// Start EEPROM write by setting EEPE
 	EECR |= (1<<EEPE);
 	//
 	sei();
@@ -434,11 +437,11 @@ void load_volume(unsigned char bank, unsigned char trigger)
 	while (EECR & (1<<EEPE)) ;
 	// Set up address register
 	EEAR = bank * 10 + trigger;
-	// Start eeprom read by writing EERE
+	// Start EEPROM read by writing EERE
 	EECR |= (1<<EERE);
 	// Return data from data register
 	result = EEDR;
-	if (result >= 10 && result <= 90) // valid !!! (-70 .. +10)
+	if (result >= 80-9 && result <= 80+9) // valid !!! (-9 .. +9)
 	{
 		track_volume[bank-1][trigger-1] = (signed char)result - 80;
 	}
@@ -450,7 +453,7 @@ void show_volume(unsigned char bank, unsigned char trigger)
 	signed char volume = track_volume[bank-1][trigger-1];
 
 	if (volume >= 0) display_char_idx_normal = (unsigned char)volume;
-	else display_char_idx_normal = 0x80 + (unsigned char)(-volume); // mit DP
+	else display_char_idx_normal = 0x80 + (unsigned char)(-volume); // with decimal point
 }
 
 // what to say
@@ -464,32 +467,21 @@ int main(void)
 	while (EECR & (1<<EEPE)) ;
 	// Set up address register
 	EEAR = 0;
-	// Start eeprom read by writing EERE
+	// Start EEPROM read by writing EERE
 	EECR |= (1<<EERE);
 	// Return data from data register
 	OSCCAL = EEDR;
 	*/
-
-	//
-	// read 36 track volumes from EEPROM
-	//
-	{
-		unsigned char b, t;
-
-		for (b = 1; b <= 6; b++)
-			for (t = 1; t <= 6; t++)
-				load_volume(b, t);
-	}
 
 	// 7-Segment port pins are outputs (DDRB-Bit = 1)
 	_7SEGMENT_DDR |= _7SEGMENT_BITS;
 	// Dummy-LED port pin is output
 	DUMMY_LED_DDR |= DUMMY_LED_PIN;
 
-	// switches 1..2 port pins are input, internal pullups
+	// switches 1..2 port pins are input, internal pull-ups
 	TAST_TRIG_1_2_OPORT |= TAST_TRIG_1_2_BITS;
 	TAST_TRIG_1_2_DDR &= ~ TAST_TRIG_1_2_BITS;
-	// switches BS + 3..6 port pins are input, internal pullups
+	// switches BS + 3..6 port pins are input, internal pull-ups
 	TAST_BS_TRIG_3_6_OPORT |= TAST_BS_TRIG_3_6_BITS;
 	TAST_BS_TRIG_3_6_DDR &= ~ TAST_BS_TRIG_3_6_BITS;
 
@@ -502,12 +494,12 @@ int main(void)
 	// timer 0:
 	// triggers every x ms, 8MHz (0.125us) * 256 = 32us: all n divided clocks
 	// CTC-Mode: -> (WGM02:0 = 2), (CS02:0 = 4), OCR0A = n - 1
-	OCR0A = TIMER_RES_MS / 0.032 - 0.5; // pre computed by compiler includes rounding +0.5
+	OCR0A = TIMER_RES_MS / 0.032 - 0.5; // precomputed by compiler includes rounding +0.5
 	TCCR0A = (1 << WGM01);
 	TCCR0B = (1 << CS02);
 	TIMSK = (1 << OCIE0A);
 
-	// uart
+	// UART
 	// 57600 Baud @ 8MHz, only TxD
 	// U2X = 1: Baud = fosc / 8 / (UBRR+1); UBRR = fosc / 8 / baud - 1 -> UBRR = 16 (smaller error than with U2x = 0!)
 	UBRRH = 0;
@@ -531,6 +523,21 @@ int main(void)
 	show_volume(1,1);
 	*/
 
+	//
+	// read 36 track volumes from EEPROM
+	//
+	{
+		unsigned char b, t;
+
+		for (b = 1; b <= 6; b++)
+		{
+			for (t = 1; t <= 6; t++)
+			{
+				load_volume(b, t);
+			}
+		}
+	}
+
 	// enable interrupts
 	sei();
 
@@ -538,8 +545,8 @@ int main(void)
 	trigger = TRIGGER_VAL_NEW_BS_MODE;
 
 	// loop forever
-    while (1) 
-    {
+	while (1) 
+	{
 		if (trigger) // trigger / bank switch pressed
 		{
 			if (trigger == TRIGGER_VAL_NEW_BS_MODE) // bank switch pressed
@@ -602,13 +609,13 @@ int main(void)
 				}
 				if (change != 0)
 				{
-					// send, save and show new track volume, don't play
+					// save and show new track volume, don't play
 					track_volume[bank-1][bs_mode-1] = tv + change;
 
-					send_volume(bank, bs_mode);
 					save_volume(bank, bs_mode);
 					show_volume(bank, bs_mode);
 					// play_track(bank, bs_mode);
+					// send_volume(bank, bs_mode);
 
 					trigger = 0;
 				}
@@ -626,6 +633,10 @@ int main(void)
 			display_blink = 1;
 
 			play_track(bank, trigger);
+			
+			// always send track volume after play_track to keep track volume integrity ensured
+			send_volume(bank, trigger);
+
 			trigger = 0;
 		}
 	}
