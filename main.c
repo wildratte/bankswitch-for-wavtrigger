@@ -6,8 +6,8 @@
  * Created: 24.10.2016 22:47:15
  * Author : JH
  *
- * 27.11.2016
- * Lots of feature improvements like volume setting, UI clarification etc.
+ * 27.11.2016 Lots of feature improvements like volume setting, UI clarification etc.
+ * 28.11.2016 Some bugs removed and tested with real hardware
  *
  */ 
 
@@ -100,20 +100,20 @@ const unsigned char _7segment_field[12][4] PROGMEM = // [4] 4 double segment tim
 	// [7] segments for '7'
 	{_7SEGMENT_SEG_A, _7SEGMENT_SEG_B + _7SEGMENT_SEG_C, 0, 0}, // dummy-led in [0]
 	// [8] segments for '8'
-	{_7SEGMENT_SEG_A, _7SEGMENT_SEG_B + _7SEGMENT_SEG_C, _7SEGMENT_SEG_D + _7SEGMENT_SEG_E, _7SEGMENT_SEG_F + _7SEGMENT_SEG_G}, // dummy-ledin [0]
+	{_7SEGMENT_SEG_A, _7SEGMENT_SEG_B + _7SEGMENT_SEG_C, _7SEGMENT_SEG_D + _7SEGMENT_SEG_E, _7SEGMENT_SEG_F + _7SEGMENT_SEG_G}, // dummy-led in [0]
 	// [9] segments for '9'
 	{0, _7SEGMENT_SEG_A + _7SEGMENT_SEG_B, _7SEGMENT_SEG_C + _7SEGMENT_SEG_D, _7SEGMENT_SEG_F + _7SEGMENT_SEG_G},
 	// [10] segments for 'b'
 	{_7SEGMENT_SEG_C, _7SEGMENT_SEG_D + _7SEGMENT_SEG_E, _7SEGMENT_SEG_F + _7SEGMENT_SEG_G, 0}, // dummy-led in [0]
 	// [11] segments for 'u'
-	{_7SEGMENT_SEG_C, _7SEGMENT_SEG_D + _7SEGMENT_SEG_E, _7SEGMENT_SEG_F + _7SEGMENT_SEG_G, 0}, // dummy-led in [0]
+	{_7SEGMENT_SEG_C, _7SEGMENT_SEG_D + _7SEGMENT_SEG_E, 0, 0}, // dummy-led in [0]
 };
 
 #define _7SEGMENT_IDX_B  10
 #define _7SEGMENT_IDX_U  11
 
 #define TIMER_RES_MS 3
-#define TASTER_STATLVL_MS        30
+#define TASTER_STATLVL_MS       30
 #define TASTER_LOLVL_LONGPRES_MS 4000
 
 #define DISPLAY_BLINK_INTERVAL_MS    250 // length of blink interval = on-cycle = off-cycle
@@ -146,8 +146,8 @@ ISR(TIMER0_COMPA_vect)
 	else if (display_blink == 3) // stop blinking immediately
 	{
 		display_blink = 0;
-		display_blink_interval_count = 0;
-		display_blink_interval_toggle_count = DISPLAY_BLINK_INTERVAL_COUNT;
+		//display_blink_interval_count = 0;
+		display_blink_interval_toggle_count = 0;
 	}
 	// blinking continues
 	if (display_blink_interval_toggle_count)
@@ -244,8 +244,15 @@ ISR(TIMER0_COMPA_vect)
 	}
 	else // low
 	{
-		if (level_lo_time_bs < TASTER_LOLVL_LONGPRES_MS/TIMER_RES_MS) level_lo_time_bs++;
-		else {bs_mode = 11; trigger = TRIGGER_VAL_NEW_BS_MODE;} // new bs_mode -> special trigger
+		if (level_lo_time_bs < TASTER_LOLVL_LONGPRES_MS/TIMER_RES_MS)
+		{
+			level_lo_time_bs++;
+		}
+		else if (bs_mode == 10)
+		{
+			bs_mode = 11;
+			trigger = TRIGGER_VAL_NEW_BS_MODE; // new bs_mode -> special trigger
+		}
 	}
 	
 	//  switch 3
@@ -266,8 +273,16 @@ ISR(TAST_TRIG_1_2_PCINT_vect)
 	
 	// if the last level is hi (>=TASTER_STATLVL_MS) -> falling edge
 	// level_hi_time[x] = 0 prevents new triggering for TASTER_STATLVL_MS ms
-	if (!(tmp & TAST_TRIG_1) && level_hi_time[1] >= TASTER_STATLVL_MS/TIMER_RES_MS) {trigger = 1; level_hi_time[1] = 0;}
-	else if (!(tmp & TAST_TRIG_2) && level_hi_time[2] >= TASTER_STATLVL_MS/TIMER_RES_MS) {trigger = 2; level_hi_time[2] = 0;}
+	if (!(tmp & TAST_TRIG_1) && level_hi_time[1] >= TASTER_STATLVL_MS/TIMER_RES_MS)
+	{
+		trigger = 1;
+		level_hi_time[1] = 0;
+	}
+	else if (!(tmp & TAST_TRIG_2) && level_hi_time[2] >= TASTER_STATLVL_MS/TIMER_RES_MS)
+	{
+		trigger = 2;
+		level_hi_time[2] = 0;
+	}
 }
 
 // BS switch + trigger switches 3..6 interrupt handler
@@ -277,11 +292,32 @@ ISR(TAST_BS_TRIG_3_6_PCINT_vect)
 	
 	// if the last level is hi (>=TASTER_STATLVL_MS) -> falling edge
 	// level_hi_time[x] = 0 prevents new triggering for TASTER_STATLVL_MS ms
-	if (!(tmp & TAST_BS) && level_hi_time[0] >= TASTER_STATLVL_MS/TIMER_RES_MS) {if (bs_mode) bs_mode = 0; else bs_mode = 10; level_hi_time[0] = 0; trigger = TRIGGER_VAL_NEW_BS_MODE;} // new bs_mode -> special trigger
-	else if (!(tmp & TAST_TRIG_3) && level_hi_time[3] >= TASTER_STATLVL_MS/TIMER_RES_MS) {trigger = 3; level_hi_time[3] = 0;}
-	else if (!(tmp & TAST_TRIG_4) && level_hi_time[4] >= TASTER_STATLVL_MS/TIMER_RES_MS) {trigger = 4; level_hi_time[4] = 0;}
-	else if (!(tmp & TAST_TRIG_5) && level_hi_time[5] >= TASTER_STATLVL_MS/TIMER_RES_MS) {trigger = 5; level_hi_time[5] = 0;}
-	else if (!(tmp & TAST_TRIG_6) && level_hi_time[6] >= TASTER_STATLVL_MS/TIMER_RES_MS) {trigger = 6; level_hi_time[6] = 0;}
+	if (!(tmp & TAST_BS) && level_hi_time[0] >= TASTER_STATLVL_MS/TIMER_RES_MS)
+	{
+		if (bs_mode) bs_mode = 0; else bs_mode = 10; // toggle bs_mode
+		level_hi_time[0] = 0;
+		trigger = TRIGGER_VAL_NEW_BS_MODE; // new bs_mode -> special trigger
+	}
+	else if (!(tmp & TAST_TRIG_3) && level_hi_time[3] >= TASTER_STATLVL_MS/TIMER_RES_MS)
+	{
+		trigger = 3;
+		level_hi_time[3] = 0;
+	}
+	else if (!(tmp & TAST_TRIG_4) && level_hi_time[4] >= TASTER_STATLVL_MS/TIMER_RES_MS)
+	{
+		trigger = 4;
+		level_hi_time[4] = 0;
+	}
+	else if (!(tmp & TAST_TRIG_5) && level_hi_time[5] >= TASTER_STATLVL_MS/TIMER_RES_MS)
+	{
+		trigger = 5;
+		level_hi_time[5] = 0;
+	}
+	else if (!(tmp & TAST_TRIG_6) && level_hi_time[6] >= TASTER_STATLVL_MS/TIMER_RES_MS)
+	{
+		trigger = 6;
+		level_hi_time[6] = 0;
+	}
 }
 
 
@@ -326,43 +362,43 @@ unsigned char wt_prot_play_solo[8] = {0xf0, 0xaa, 0x08, 0x03, 0x00, 0x00, 0x00, 
 unsigned char wt_prot_track_volume[9] = {0xf0, 0xaa, 0x09, 0x08, 0x00, 0x00, 0x00, 0x00, 0x55}; // track number in [4] + [5], track volume in [6] + [7] (16bit signed)
 
 // calculate track number send to Wavtrigger from bank and trigger
-uint16_t calc_prot_tracknumber(unsigned char bank, unsigned char trigger)
+uint16_t calc_prot_tracknumber(unsigned char bank, unsigned char track)
 {
-	uint16_t track = 0;
+	uint16_t track_ui16 = 0;
 	uint16_t bs;
 
-	//track = (uint16_t)bank * 100 + (uint16_t)trigger;  !! bank * 10 + trigger would also work, then track number only 11..66 (1 Byte)
+	//track_ui16 = (uint16_t)bank * 100 + (uint16_t)track;  !! bank * 10 + track would also work, then track number only 11..66 (1 Byte)
 	bs = (uint16_t)(bank << 2); // bank * 4
-	track += bs;
+	track_ui16 += bs;
 	bs <<= 3; // bank * 4 * 8 (32)
-	track += bs;
+	track_ui16 += bs;
 	bs <<= 1; // bank * 4 * 8 * 2 (64)
-	track += bs;
-	track += (uint16_t)trigger;
+	track_ui16 += bs;
+	track_ui16 += (uint16_t)track;
 
-	return track;
+	return track_ui16;
 }
 
 void send_prot(unsigned char * prot, unsigned char prot_len)
 {
 	unsigned char i;
 
-	for (i = 0; i < sizeof(wt_prot_play_solo); i++)
+	for (i = 0; i < prot_len; i++)
 	{
 		// Wait for empty transmit buffer
 		while ( !( UCSRA & (1<<UDRE)) );
 		// Put data into buffer, sends the data
-		UDR = wt_prot_play_solo[i];
+		UDR = prot[i];
 	}
 }
 
 // send play track monophonic
-void play_track(unsigned char bank, unsigned char trigger)
+void play_track(unsigned char bank, unsigned char track)
 {
-	uint16_t track = 0;
-	unsigned char * track_ucp = (unsigned char *)&track;
+	uint16_t track_ui16 = 0;
+	unsigned char * track_ucp = (unsigned char *)&track_ui16;
 
-	track = calc_prot_tracknumber(bank, trigger);
+	track_ui16 = calc_prot_tracknumber(bank, track);
 
 	wt_prot_play_solo[5] = track_ucp[0];
 	wt_prot_play_solo[6] = track_ucp[1];
@@ -385,15 +421,15 @@ signed char track_volume[6][6] =
 	{0,0,0,0,0,0},
 };
 
-// sends the volume of track [bank][trigger] to Wavtrigger board
-void send_volume(unsigned char bank, unsigned char trigger)
+// sends the volume of track [bank][track] to Wavtrigger board
+void send_volume(unsigned char bank, unsigned char track)
 {
-	uint16_t track;
-	unsigned char * track_ucp = (unsigned char *)&track;
+	uint16_t track_ui16;
+	unsigned char * track_ucp = (unsigned char *)&track_ui16;
 	//
-	signed char volume = track_volume[bank-1][trigger-1];
+	signed char volume = track_volume[bank-1][track-1];
 
-	track = calc_prot_tracknumber(bank, trigger);
+	track_ui16 = calc_prot_tracknumber(bank, track);
 
 	wt_prot_track_volume[4] = track_ucp[0];
 	wt_prot_track_volume[5] = track_ucp[1];
@@ -406,10 +442,10 @@ void send_volume(unsigned char bank, unsigned char trigger)
 	send_prot(wt_prot_track_volume,sizeof(wt_prot_track_volume));
 }
 
-// saves volume of track [bank][trigger] to EEPROM
-void save_volume(unsigned char bank, unsigned char trigger)
+// saves volume of track [bank][track] to EEPROM
+void save_volume(unsigned char bank, unsigned char track)
 {
-	signed char volume = track_volume[bank-1][trigger-1];
+	signed char volume = track_volume[bank-1][track-1];
 
 	cli();
 	// Wait for completion of previous write
@@ -417,7 +453,7 @@ void save_volume(unsigned char bank, unsigned char trigger)
 	// Set Programming mode
 	EECR = (0<<EEPM1)|(0<<EEPM0);
 	// Set up address and data registers
-	EEAR =  bank * 10 + trigger;
+	EEAR =  bank * 10 + track;
 	EEDR = (unsigned char)(volume + 80);
 	// Write logical one to EEMPE
 	EECR |= (1<<EEMPE);
@@ -428,29 +464,29 @@ void save_volume(unsigned char bank, unsigned char trigger)
 	return;
 }
 
-// loads volume of track [bank][trigger] from EEPROM
-void load_volume(unsigned char bank, unsigned char trigger)
+// loads volume of track [bank][track] from EEPROM
+void load_volume(unsigned char bank, unsigned char track)
 {
 	unsigned char result;
 
 	// Wait for completion of previous write
 	while (EECR & (1<<EEPE)) ;
 	// Set up address register
-	EEAR = bank * 10 + trigger;
+	EEAR = bank * 10 + track;
 	// Start EEPROM read by writing EERE
 	EECR |= (1<<EERE);
 	// Return data from data register
 	result = EEDR;
 	if (result >= 80-9 && result <= 80+9) // valid !!! (-9 .. +9)
 	{
-		track_volume[bank-1][trigger-1] = (signed char)result - 80;
+		track_volume[bank-1][track-1] = (signed char)result - 80;
 	}
 }
 
-// display volume of track [bank][trigger]
-void show_volume(unsigned char bank, unsigned char trigger)
+// display volume of track [bank][track]
+void show_volume(unsigned char bank, unsigned char track)
 {
-	signed char volume = track_volume[bank-1][trigger-1];
+	signed char volume = track_volume[bank-1][track-1];
 
 	if (volume >= 0) display_char_idx_normal = (unsigned char)volume;
 	else display_char_idx_normal = 0x80 + (unsigned char)(-volume); // with decimal point
@@ -547,98 +583,100 @@ int main(void)
 	// loop forever
 	while (1) 
 	{
-		if (trigger) // trigger / bank switch pressed
+		unsigned char trigger_loc = trigger;
+		trigger = 0;
+
+		if (trigger_loc) // trigger / bank switch pressed
 		{
-			if (trigger == TRIGGER_VAL_NEW_BS_MODE) // bank switch pressed
+			if (trigger_loc == TRIGGER_VAL_NEW_BS_MODE) // bank switch pressed
 			{
 				if (bs_mode == 10)
 				{
-					display_char_idx_blink = _7SEGMENT_IDX_B; display_blink = 2; // display blinking 'b'
+					display_char_idx_blink = _7SEGMENT_IDX_B;
+					display_blink = 2; // display blinking 'b'
 				}
 				else if (bs_mode == 11)
 				{
-					display_char_idx_blink = _7SEGMENT_IDX_U; display_blink = 2; // display blinking 'u'
+					display_char_idx_blink = _7SEGMENT_IDX_U;
+					display_blink = 2; // display blinking 'u'
 				}
 				else // == 0 deactivate mode
 				{
 					display_char_idx_normal = bank;
 					display_blink = 3; // stop blinking
 				}
-				trigger = 0;
+				trigger_loc = 0;
 			}
 			else if (bs_mode == 10) // switch bank to number of pressed trigger switch
 			{
-				bank = trigger;
+				bank = trigger_loc;
 				//
 				display_blink = 3; // stop blinking
 				display_char_idx_normal = bank;
 				bs_mode = 0;
 				//
-				trigger = 0;
+				trigger_loc = 0;
 			}
 			else if (bs_mode == 11) // select track on current bank for volume change
 			{
-				bs_mode = trigger;
+				bs_mode = trigger_loc;
 				//
 				display_blink = 3; // stop blinking
 				//display track volume (decimal point when < 0)
 				show_volume(bank, bs_mode);
 				// 
-				trigger = 0;
+				trigger_loc = 0;
 			}
-			else if (bs_mode > 0) // change track volume: bs_mode is track number on bank
+			else if (bs_mode > 0) // change track volume: bs_mode is track number on bank 
 			{
 				signed char change = 0;
 				signed char tv = track_volume[bank-1][bs_mode-1];
 
-				if (tv > -9 && tv < 9)
+				switch (bs_mode)
 				{
-					switch (bs_mode)
-					{
-						// volume adjust with trigger switches 5 + 6
-						case 1: case 2: case 3:
-							if (trigger == 5) change = -1;// Volume-
-							else if (trigger == 6) change = 1;// Volume+
-							break;
-						// volume adjust with trigger switches 1 + 2
-						case 4: case 5: case 6:
-							if (trigger == 1) change = -1;// Volume-
-							else if (trigger == 2) change = 1;// Volume+
-							break;
-					}
+					// volume adjust with trigger switches 5 + 6
+					case 1: case 2: case 3:
+						if (trigger_loc == 5) change = -1;// Volume-
+						else if (trigger_loc == 6) change = 1;// Volume+
+						break;
+					// volume adjust with trigger switches 1 + 2
+					case 4: case 5: case 6:
+						if (trigger_loc == 1) change = -1;// Volume-
+						else if (trigger_loc == 2) change = 1;// Volume+
+						break;
 				}
-				if (change != 0)
+				tv += change;
+				if (change != 0 && tv >= -9 && tv <= 9)
 				{
 					// save and show new track volume, don't play
-					track_volume[bank-1][bs_mode-1] = tv + change;
+					track_volume[bank-1][bs_mode-1] = tv;
 
 					save_volume(bank, bs_mode);
 					show_volume(bank, bs_mode);
 					// play_track(bank, bs_mode);
 					send_volume(bank, bs_mode); // (re)enables track volume update of playing track
 
-					trigger = 0;
+					trigger_loc = 0;
 				}
-				else if (trigger != bs_mode) // switch without meaning in this mode
+				else if (trigger_loc != bs_mode) // switch without meaning in this mode
 				{
-					trigger = 0;
+					trigger_loc = 0;
 				}
 				// let through trigger for playing this track
 			}
 		}
 
-		if (trigger) // trigger switch depressed, trigger WavTrigger track, show track number for short time blinking with decimal point
+		if (trigger_loc) // trigger switch depressed, trigger WavTrigger track, show track number for short time blinking with decimal point
 		{
-			display_char_idx_blink = 0x80 + trigger;
+			display_char_idx_blink = 0x80 + trigger_loc;
 			display_blink = 1;
 
-			play_track(bank, trigger);
+			play_track(bank, trigger_loc);
 			
 			// always send track volume after play_track to keep track volume integrity ensured
-			send_volume(bank, trigger);
+			send_volume(bank, trigger_loc);
 
-			trigger = 0;
+			trigger_loc = 0;
 		}
 	}
 }
-
